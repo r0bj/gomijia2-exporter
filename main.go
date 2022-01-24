@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	ver = "0.1"
+	ver = "0.2"
 )
 
 var (
 	configFile = flag.String("config_file", "config.ini", "Config file location")
+	listenAddress = flag.String("web.listen-address", ":9999", "Address to listen on for web interface and telemetry")
 	version = flag.Bool("v", false, "Prints current version")
 )
 
@@ -65,5 +66,5 @@ func main() {
 	}
 
 	http.Handle("/metrics", promhttp.Handler())
-	log.Fatal(http.ListenAndServe(":9999", nil))
+	log.Fatal(http.ListenAndServe(*listenAddress, nil))
 }
