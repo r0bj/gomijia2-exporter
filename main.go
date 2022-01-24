@@ -4,6 +4,8 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"fmt"
+	"os"
 
 	"github.com/currantlabs/ble/linux"
 	"github.com/prometheus/client_golang/prometheus"
@@ -11,8 +13,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+const (
+	ver = "0.1"
+)
+
 var (
 	configFile = flag.String("config_file", "config.ini", "Config file location")
+	version = flag.Bool("v", false, "Prints current version")
 )
 
 var (
@@ -25,6 +32,11 @@ var (
 
 func main() {
 	flag.Parse()
+
+	if *version {
+		fmt.Println(ver)
+		os.Exit(0)
+	}
 
 	log.Print("[main] Reading configuration")
 	config, err := NewConfig(*configFile)
