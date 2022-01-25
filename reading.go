@@ -10,37 +10,19 @@ import (
 type Reading struct {
 	Temperature float64
 	Humidity    float64
-}
-
-// Equal determine whether one Reading is equal to another
-func (r *Reading) Equal(s Reading) bool {
-	log.Printf("[Reading:Equal] Temperatures: %f (%f); Humidity: %f (%f)", r.Temperature, s.Temperature, r.Humidity, s.Humidity)
-	if r.Temperature != s.Temperature {
-		log.Print("[Reading:Equal] Temperatures don't match")
-	}
-	if r.Humidity != s.Humidity {
-		log.Print("[Reading:Equal] Humidities don't match")
-	}
-	return r.Temperature == s.Temperature && r.Humidity == s.Humidity
+	Voltage     float64
 }
 
 // ToString converts a Reading to a string
 func (r *Reading) String() string {
-	return fmt.Sprintf("Temperature: %.04f; Humidity: %.04f", r.Temperature, r.Humidity)
-}
-
-// NewReading returns a new Reading
-func NewReading(t, h float64) *Reading {
-	return &Reading{
-		Temperature: t,
-		Humidity:    h,
-	}
+	// return fmt.Sprintf("Temperature: %.04f; Humidity: %.04f", r.Temperature, r.Humidity)
+	return fmt.Sprintf("Temperature: %.04f; Humidity: %.04f; Voltge: %.04f", r.Temperature, r.Humidity, r.Voltage)
 }
 
 // Unmarshall converts an encoded reading into a Reading
 func Unmarshall(req []byte) (*Reading, error) {
 	// 00 01 02 03 04
-	// T2 T1 HX ?? ??
+	// T2 T1 HX V1 V2
 	l := len(req)
 	if l != 5 {
 		log.Printf("[X] Expecting 5 bytes; got %d", l)
@@ -49,8 +31,10 @@ func Unmarshall(req []byte) (*Reading, error) {
 	// Temperature is stored little endian
 	t := float64(int(binary.LittleEndian.Uint16(req[0:2]))) / 100.0
 	h := float64(req[2]) / 100.0
+	v := float64(int(binary.LittleEndian.Uint16(req[3:5]))) / 1000
 	return &Reading{
 		Temperature: t,
 		Humidity:    h,
+		Voltage:     v,
 	}, nil
 }
