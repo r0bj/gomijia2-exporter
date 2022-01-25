@@ -15,7 +15,6 @@ type Reading struct {
 
 // ToString converts a Reading to a string
 func (r *Reading) String() string {
-	// return fmt.Sprintf("Temperature: %.04f; Humidity: %.04f", r.Temperature, r.Humidity)
 	return fmt.Sprintf("Temperature: %.04f; Humidity: %.04f; Voltge: %.04f", r.Temperature, r.Humidity, r.Voltage)
 }
 
@@ -30,7 +29,7 @@ func Unmarshall(req []byte) (*Reading, error) {
 	}
 	// Temperature is stored little endian
 	t := float64(int(binary.LittleEndian.Uint16(req[0:2]))) / 100.0
-	h := float64(req[2]) / 100.0
+	h := float64(req[2])
 	v := float64(int(binary.LittleEndian.Uint16(req[3:5]))) / 1000
 	return &Reading{
 		Temperature: t,
