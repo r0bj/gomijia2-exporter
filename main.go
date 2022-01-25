@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	ver = "0.3"
+	ver = "0.4"
 )
 
 var (
@@ -38,6 +38,8 @@ func main() {
 		fmt.Println(ver)
 		os.Exit(0)
 	}
+
+	log.Printf("[main] Starting version %s", ver)
 
 	log.Print("[main] Reading configuration")
 	config, err := NewConfig(*configFile)
