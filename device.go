@@ -9,6 +9,10 @@ import (
 	"golang.org/x/net/context"
 )
 
+const (
+	interval int = 60
+)
+
 var (
 	characteristix = map[uint8]ble.UUID{
 		36: ble.MustParse("ebe0ccc1-7a0a-4b0c-8a1a-6ff2997da3a6"),
@@ -36,7 +40,7 @@ func (d *Device) Disconnect() error {
 }
 
 // RegisterHandler registers a Temperature|Humidity handler
-func (d *Device) RegisterHandler() {
+func RegisterHandler(d Device) {
 
 	// Thanks to other developers
 	// Write to handle `0x0038` with value `0x0100` is required to trigger notification of humidity|temperature
@@ -67,9 +71,17 @@ func (d *Device) sub(c ble.UUID) {
 			// If this Characteristic suports notifications and there's a CCCD
 			// Then subscribe to it
 			if (c.Property&ble.CharNotify) != 0 && c.CCCD != nil {
-				log.Printf("[Device:sub:%s] (%04x) Registering Temperature|Humidity Handler", d.Name, c.Handle)
-				if err := d.Client.Subscribe(c, false, handlerPublisher(d.Name)); err != nil {
-					log.Print(err)
+				// Subscribe/Unsubscribe loop to slow down measurements to save the battery (default measurement rate is every ~6s)
+				for {
+					log.Printf("[Device:sub:%s] (%04x) Registering Temperature|Humidity Handler", d.Name, c.Handle)
+					if err := d.Client.Subscribe(c, false, handlerPublisher(d.Name)); err != nil {
+						log.Print(err)
+					}
+					time.Sleep(6*time.Second)
+					if err := d.Client.Unsubscribe(c, false); err != nil {
+						log.Print(err)
+					}
+					time.Sleep(time.Duration(interval)*time.Second)
 				}
 			}
 		}

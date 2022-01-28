@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	ver = "0.7"
+	ver string = "0.8"
 )
 
 var (
@@ -64,7 +64,7 @@ func main() {
 		}
 
 		log.Printf("[main:%s] Registering handler", device.Name)
-		device.RegisterHandler()
+		go RegisterHandler(device)
 	}
 
 	http.Handle("/metrics", promhttp.Handler())
