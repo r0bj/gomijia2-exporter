@@ -85,5 +85,7 @@ func (d *Device) sub(c ble.UUID) {
 				}
 			}
 		}
+	} else {
+		log.Fatal(err)
 	}
 }

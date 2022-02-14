@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	ver string = "0.8"
+	ver string = "0.9"
 )
 
 var (
