@@ -75,17 +75,17 @@ func (d *Device) sub(c ble.UUID) {
 				for {
 					log.Printf("[Device:sub:%s] (%04x) Registering Temperature|Humidity Handler", d.Name, c.Handle)
 					if err := d.Client.Subscribe(c, false, handlerPublisher(d.Name)); err != nil {
-						log.Print(err)
+						log.Printf("[Device:sub:%s] (%04x) Subscribe Error: %v", d.Name, c.Handle, err)
 					}
 					time.Sleep(6*time.Second)
 					if err := d.Client.Unsubscribe(c, false); err != nil {
-						log.Print(err)
+						log.Printf("[Device:sub:%s] (%04x) Unsubscribe Error: %v", d.Name, c.Handle, err)
 					}
 					time.Sleep(time.Duration(interval)*time.Second)
 				}
 			}
 		}
 	} else {
-		log.Fatal(err)
+		log.Fatalf("[Device:sub:%s] Handler: %s; Discover Profile Error: %v", d.Name, c.String(), err)
 	}
 }
