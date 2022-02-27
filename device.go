@@ -9,10 +9,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-const (
-	interval int = 60
-)
-
 var (
 	characteristix = map[uint8]ble.UUID{
 		36: ble.MustParse("ebe0ccc1-7a0a-4b0c-8a1a-6ff2997da3a6"),
@@ -64,28 +60,31 @@ func (d *Device) pub(c ble.UUID, b []byte) {
 }
 
 func (d *Device) sub(c ble.UUID) {
-	log.Printf("[Device:sub:%s] Handler: %s", d.Name, c.String())
-	if p, err := d.Client.DiscoverProfile(true); err == nil {
-		if u := p.Find(ble.NewCharacteristic(c)); u != nil {
-			c := u.(*ble.Characteristic)
-			// If this Characteristic suports notifications and there's a CCCD
-			// Then subscribe to it
-			if (c.Property&ble.CharNotify) != 0 && c.CCCD != nil {
-				// Subscribe/Unsubscribe loop to slow down measurements to save the battery (default measurement rate is every ~6s)
-				for {
-					log.Printf("[Device:sub:%s] (%04x) Registering Temperature|Humidity Handler", d.Name, c.Handle)
-					if err := d.Client.Subscribe(c, false, handlerPublisher(d.Name)); err != nil {
-						log.Printf("[Device:sub:%s] (%04x) Subscribe Error: %v", d.Name, c.Handle, err)
+	for {
+		log.Printf("[Device:sub:%s] Handler: %s", d.Name, c.String())
+		if p, err := d.Client.DiscoverProfile(true); err == nil {
+			if u := p.Find(ble.NewCharacteristic(c)); u != nil {
+				c := u.(*ble.Characteristic)
+				// If this Characteristic suports notifications and there's a CCCD
+				// Then subscribe to it
+				if (c.Property&ble.CharNotify) != 0 && c.CCCD != nil {
+					// Subscribe/Unsubscribe loop to slow down measurements to save the battery (default measurement rate is every ~6s)
+					for {
+						log.Printf("[Device:sub:%s] (%04x) Registering Temperature|Humidity Handler", d.Name, c.Handle)
+						if err := d.Client.Subscribe(c, false, handlerPublisher(d.Name)); err != nil {
+							log.Printf("[Device:sub:%s] (%04x) Subscribe Error: %v", d.Name, c.Handle, err)
+						}
+						time.Sleep(6 * time.Second)
+						if err := d.Client.Unsubscribe(c, false); err != nil {
+							log.Printf("[Device:sub:%s] (%04x) Unsubscribe Error: %v", d.Name, c.Handle, err)
+						}
+						time.Sleep(time.Duration(*measurementInterval) * time.Second)
 					}
-					time.Sleep(6*time.Second)
-					if err := d.Client.Unsubscribe(c, false); err != nil {
-						log.Printf("[Device:sub:%s] (%04x) Unsubscribe Error: %v", d.Name, c.Handle, err)
-					}
-					time.Sleep(time.Duration(interval)*time.Second)
 				}
 			}
+		} else {
+			log.Printf("[Device:sub:%s] Handler: %s; Discover Profile Error: %v", d.Name, c.String(), err)
 		}
-	} else {
-		log.Fatalf("[Device:sub:%s] Handler: %s; Discover Profile Error: %v", d.Name, c.String(), err)
+		time.Sleep(time.Duration(*measurementInterval) * time.Second)
 	}
 }

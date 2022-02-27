@@ -44,6 +44,6 @@ func handlerPublisher(name string) func(req []byte) {
 		humidity.WithLabelValues(name).Set(r.Humidity)
 		voltage.WithLabelValues(name).Set(r.Voltage)
 		// 3.1V or above --> 100% 2.1V --> 0 %
-		battery.WithLabelValues(name).Set(math.Round(math.Min((r.Voltage-2.1)*100, 100)*100)/100)
+		battery.WithLabelValues(name).Set(math.Round(math.Min((r.Voltage-2.1) * 100, 100) * 100) / 100)
 	}
 }

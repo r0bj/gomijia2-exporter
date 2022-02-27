@@ -2,10 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
-	"fmt"
 	"os"
+	"time"
 
 	"github.com/currantlabs/ble/linux"
 	"github.com/prometheus/client_golang/prometheus"
@@ -14,13 +15,15 @@ import (
 )
 
 const (
-	ver string = "0.10"
+	ver string = "0.14"
+	initialDelay int = 5
 )
 
 var (
-	configFile = flag.String("config_file", "config.ini", "Config file location")
-	listenAddress = flag.String("web.listen-address", ":9999", "Address to listen on for web interface and telemetry")
-	version = flag.Bool("v", false, "Prints current version")
+	configFile          = flag.String("config_file", "config.ini", "Config file location")
+	listenAddress       = flag.String("web.listen-address", ":9999", "Address to listen on for web interface and telemetry")
+	measurementInterval = flag.Int("measurement-interval", 60, "Measurement interval in seconds")
+	version             = flag.Bool("v", false, "Prints current version")
 )
 
 var (
@@ -40,6 +43,8 @@ func main() {
 	}
 
 	log.Printf("[main] Starting version %s", ver)
+	// Sleep is a workaround for: can't init hci: no devices available: (hci0: can't up device: interrupted system call)
+	time.Sleep(time.Duration(initialDelay) * time.Second)
 
 	log.Print("[main] Reading configuration")
 	config, err := NewConfig(*configFile)
