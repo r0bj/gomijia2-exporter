@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/hex"
-	"log"
+	"log/slog"
 	"math"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -14,22 +14,22 @@ var (
 		Name: "mi_temperature",
 		Help: "MI sensor temperature",
 	},
-	[]string{"location"})
+		[]string{"location"})
 	humidity = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "mi_humidity",
 		Help: "MI sensor humidity",
 	},
-	[]string{"location"})
+		[]string{"location"})
 	voltage = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "mi_voltage",
 		Help: "MI sensor battery voltage",
 	},
-	[]string{"location"})
+		[]string{"location"})
 	battery = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "mi_battery",
 		Help: "MI sensor battery level",
 	},
-	[]string{"location"})
+		[]string{"location"})
 )
 
 func handlerPublisher(name string) func(req []byte) {
@@ -37,13 +37,29 @@ func handlerPublisher(name string) func(req []byte) {
 		s := hex.EncodeToString(req)
 		r, err := Unmarshall(req)
 		if err != nil {
-			log.Printf("[handler:%s] Unable to unmarshal data (%s)", name, s)
+			slog.Error("Unable to unmarshal data",
+				"device", name,
+				"data", s,
+				"error", err)
+			return
 		}
-		log.Printf("[handler:%s] %s (%s)", name, r.String(), s)
+
+		slog.Info("Received sensor data",
+			"device", name,
+			"temperature", r.Temperature,
+			"humidity", r.Humidity,
+			"voltage", r.Voltage,
+			"rawData", s)
+
 		temperature.WithLabelValues(name).Set(r.Temperature)
 		humidity.WithLabelValues(name).Set(r.Humidity)
 		voltage.WithLabelValues(name).Set(r.Voltage)
 		// 3.1V or above --> 100% 2.1V --> 0 %
-		battery.WithLabelValues(name).Set(math.Round(math.Min((r.Voltage-2.1) * 100, 100) * 100) / 100)
+		batteryPercent := math.Round(math.Min((r.Voltage-2.1)*100, 100)*100) / 100
+		battery.WithLabelValues(name).Set(batteryPercent)
+
+		slog.Info("Updated metrics",
+			"device", name,
+			"batteryPercent", batteryPercent)
 	}
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/currantlabs/ble/linux"
 	"gopkg.in/ini.v1"
@@ -15,7 +15,7 @@ type Config struct {
 
 // NewConfig returns a new Config
 func NewConfig(file string) (*Config, error) {
-	log.Printf("[Config] Loading Configuration (%s)", file)
+	slog.Info("Loading configuration", "file", file)
 	cfg, err := ini.Load(file)
 	if err != nil {
 		return &Config{}, err
@@ -30,7 +30,10 @@ func NewConfig(file string) (*Config, error) {
 	devices := []Device{}
 	for i, name := range names {
 		addr := sec.Key(name).String()
-		log.Printf("[Config] Device %02d: %s (%s)", i, name, addr)
+		slog.Info("Found device in config",
+			"index", i,
+			"device", name,
+			"address", addr)
 		devices = append(devices, Device{
 			Name: name,
 			Addr: addr,

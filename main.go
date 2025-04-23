@@ -1,77 +1,169 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/currantlabs/ble/linux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spf13/pflag"
 )
 
 const (
-	ver string = "0.14"
-	initialDelay int = 5
+	ver string = "0.15"
 )
 
 var (
-	configFile          = flag.String("config_file", "config.ini", "Config file location")
-	listenAddress       = flag.String("web.listen-address", ":9999", "Address to listen on for web interface and telemetry")
-	measurementInterval = flag.Int("measurement-interval", 60, "Measurement interval in seconds")
-	version             = flag.Bool("v", false, "Prints current version")
+	configFile          = pflag.String("config-file", "config.ini", "Config file location")
+	listenAddress       = pflag.String("web.listen-address", ":8080", "Address to listen on for web interface and telemetry")
+	measurementInterval = pflag.Int("measurement-interval", 60, "Measurement interval in seconds")
+	version             = pflag.Bool("version", false, "Prints current version")
 )
 
 var (
-	deviceConnectionFailed = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "mi_device_connection_failed",
-		Help: "MI device connection failed",
+	deviceErrorsCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "mi_device_errors_total",
+		Help: "MI device errors",
 	},
-	[]string{"location"})
+		[]string{"location"})
 )
+
+// Global BLE device and mutex for synchronization
+var (
+	bleMutex            sync.Mutex
+	bleDevice           *linux.Device
+	resetBLEDeviceMutex sync.Mutex
+	globalConfig        *Config // Store config globally for device reset
+)
+
+// resetBLEDevice recreates the BLE device to recover from persistent errors
+func resetBLEDevice() error {
+	resetBLEDeviceMutex.Lock()
+	defer resetBLEDeviceMutex.Unlock()
+
+	// Acquire the BLE device mutex to ensure no one is using it
+	slog.Warn("Starting BLE device reset process")
+	bleMutex.Lock()
+	defer bleMutex.Unlock()
+
+	// Reset all device error counters
+	if globalConfig != nil {
+		for _, device := range globalConfig.Devices {
+			ResetErrors(device.Name)
+			slog.Info("Reset error counter during device reset", "device", device.Name)
+		}
+	} else {
+		slog.Warn("No global config available, skipping device error counter reset")
+	}
+
+	// Clean up existing device if it exists
+	if bleDevice != nil {
+		slog.Info("Stopping existing BLE device")
+		bleDevice.Stop()
+		bleDevice = nil
+	}
+
+	// Create new device
+	slog.Info("Creating new BLE device")
+	var err error
+	bleDevice, err = linux.NewDevice()
+	if err != nil {
+		slog.Error("Failed to create new BLE device", "error", err)
+		return err
+	}
+
+	slog.Info("BLE device reset completed successfully")
+	ClearBLEDeviceResetRequest()
+	return nil
+}
 
 func main() {
-	flag.Parse()
+	// Configure structured logging
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	slog.SetDefault(slog.New(handler))
+
+	pflag.Parse()
 
 	if *version {
 		fmt.Println(ver)
 		os.Exit(0)
 	}
 
-	log.Printf("[main] Starting version %s", ver)
-	// Sleep is a workaround for: can't init hci: no devices available: (hci0: can't up device: interrupted system call)
-	time.Sleep(time.Duration(initialDelay) * time.Second)
+	slog.Info("Starting", "version", ver)
 
-	log.Print("[main] Reading configuration")
+	slog.Info("Reading configuration")
 	config, err := NewConfig(*configFile)
 	if err != nil {
-		log.Fatal("Unable to parse configuration")
+		slog.Error("Unable to parse configuration", "error", err)
+		os.Exit(1)
 	}
 
-	log.Print("[main] Starting Linux Device")
-	config.Host, err = linux.NewDevice()
+	// Store config globally for device reset
+	globalConfig = config
+
+	// Create the BLE device once for all handlers to share
+	slog.Info("Starting Linux Device")
+	bleDevice, err = linux.NewDevice()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Failed to initialize BLE device", "error", err)
+		os.Exit(1)
 	}
 
-	for _, device := range config.Devices {
-		log.Printf("[main:%s] Dialing (%s)", device.Name, device.Addr)
-		if err := device.Connect(config.Host); err != nil {
-			log.Printf("[main:%s] Failed to connect to device", device.Name)
-			deviceConnectionFailed.WithLabelValues(device.Name).Set(1)
-			continue
-		} else {
-			deviceConnectionFailed.WithLabelValues(device.Name).Set(0)
+	// Start a goroutine to monitor and reset BLE device if needed
+	go func() {
+		checkInterval := 15 * time.Second
+		checkCount := 0
+
+		for {
+			// Log the monitor status periodically
+			checkCount++
+			if checkCount%4 == 0 { // Log every minute
+				slog.Info("BLE device reset monitor check",
+					"resetRequested", IsBLEDeviceResetRequested())
+			}
+
+			if IsBLEDeviceResetRequested() {
+				slog.Info("BLE device reset requested, attempting reset")
+				if err := resetBLEDevice(); err != nil {
+					slog.Error("BLE device reset failed", "error", err)
+					// If reset fails, wait a bit longer before trying again
+					time.Sleep(30 * time.Second)
+				} else {
+					slog.Info("BLE device reset successful")
+				}
+			}
+
+			time.Sleep(checkInterval)
 		}
+	}()
 
-		log.Printf("[main:%s] Registering handler", device.Name)
-		go RegisterHandler(device)
+	// Start handlers for each device with staggered timing
+	for i, device := range config.Devices {
+		slog.Info("Starting handler for device",
+			"device", device.Name,
+			"address", device.Addr)
+		// Stagger the start times to avoid collisions
+		startDelay := i * 3 // 5 seconds between device starts
+		go func(d Device, delay int) {
+			// Initial delay to stagger device polling
+			time.Sleep(time.Duration(delay) * time.Second)
+			RegisterHandler(d)
+		}(device, startDelay)
 	}
 
+	slog.Info("Starting HTTP server", "address", *listenAddress)
 	http.Handle("/metrics", promhttp.Handler())
-	log.Fatal(http.ListenAndServe(*listenAddress, nil))
+	err = http.ListenAndServe(*listenAddress, nil)
+	if err != nil {
+		slog.Error("HTTP server error", "error", err)
+		os.Exit(1)
+	}
 }

@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
+	"log/slog"
 )
 
-// Reading represents a Temperature|Humidity readings
+// Reading represents a Temperature and Humidity readings
 type Reading struct {
 	Temperature float64
 	Humidity    float64
@@ -24,7 +24,9 @@ func Unmarshall(req []byte) (*Reading, error) {
 	// T2 T1 HX V1 V2
 	l := len(req)
 	if l != 5 {
-		log.Printf("[X] Expecting 5 bytes; got %d", l)
+		slog.Error("Invalid data length",
+			"expected", 5,
+			"actual", l)
 		return &Reading{}, fmt.Errorf("Expecting 5 bytes got %d", l)
 	}
 	// Temperature is stored little endian
