@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,18 +11,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/spf13/pflag"
+	flag "github.com/spf13/pflag"
 )
 
 const (
-	ver string = "0.15"
+	ver string = "0.17"
 )
 
 var (
-	configFile          = pflag.String("config-file", "config.ini", "Config file location")
-	listenAddress       = pflag.String("web.listen-address", ":8080", "Address to listen on for web interface and telemetry")
-	measurementInterval = pflag.Int("measurement-interval", 60, "Measurement interval in seconds")
-	version             = pflag.Bool("version", false, "Prints current version")
+	configFile          = flag.String("config-file", "config.ini", "Config file location")
+	listenAddress       = flag.String("web.listen-address", ":8080", "Address to listen on for web interface and telemetry")
+	measurementInterval = flag.Int("measurement-interval", 60, "Measurement interval in seconds")
+	verbose             = flag.Bool("verbose", false, "Enable verbose output")
 )
 
 var (
@@ -84,17 +83,15 @@ func resetBLEDevice() error {
 }
 
 func main() {
-	// Configure structured logging
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-	slog.SetDefault(slog.New(handler))
+	var loggingLevel = new(slog.LevelVar)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
+	slog.SetDefault(logger)
 
-	pflag.Parse()
+	flag.Parse()
 
-	if *version {
-		fmt.Println(ver)
-		os.Exit(0)
+	if *verbose {
+		loggingLevel.Set(slog.LevelDebug)
+		slog.Debug("Debug logging enabled")
 	}
 
 	slog.Info("Starting", "version", ver)
