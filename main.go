@@ -48,8 +48,44 @@ func resetBLEDevice() error {
 
 	// Acquire the BLE device mutex to ensure no one is using it
 	slog.Warn("Starting BLE device reset process")
-	bleMutex.Lock()
-	defer bleMutex.Unlock()
+
+	// Use a timeout when acquiring the mutex to prevent deadlocks
+	timeout := time.After(10 * time.Second)
+	done := make(chan bool, 1)
+
+	// Try to acquire the mutex in a separate goroutine
+	go func() {
+		bleMutex.Lock()
+		done <- true
+	}()
+
+	// Wait for either mutex acquisition or timeout
+	select {
+	case <-done:
+		// Mutex was acquired successfully
+		slog.Info("Acquired BLE mutex for device reset")
+		defer bleMutex.Unlock()
+	case <-timeout:
+		slog.Error("Timeout waiting for BLE mutex during device reset, forcing reset")
+		// If we can't acquire the mutex, the system might be in a deadlock
+		if bleDevice != nil {
+			slog.Info("Force stopping existing BLE device")
+			bleDevice.Stop()
+			bleDevice = nil
+		}
+
+		slog.Info("Creating new BLE device after timeout")
+		var err error
+		bleDevice, err = linux.NewDevice()
+		if err != nil {
+			slog.Error("Failed to create new BLE device after timeout", "error", err)
+			return err
+		}
+
+		slog.Info("BLE device reset completed after timeout")
+		ClearBLEDeviceResetRequest()
+		return nil
+	}
 
 	// Reset all device error counters
 	if globalConfig != nil {
@@ -116,13 +152,13 @@ func main() {
 
 	// Start a goroutine to monitor and reset BLE device if needed
 	go func() {
-		checkInterval := 15 * time.Second
+		checkInterval := 5 * time.Second // Reduced from 15 seconds
 		checkCount := 0
 
 		for {
 			// Log the monitor status periodically
 			checkCount++
-			if checkCount%4 == 0 { // Log every minute
+			if checkCount%12 == 0 { // Still log every minute (12*5=60 seconds)
 				slog.Info("BLE device reset monitor check",
 					"resetRequested", IsBLEDeviceResetRequested())
 			}
@@ -132,7 +168,7 @@ func main() {
 				if err := resetBLEDevice(); err != nil {
 					slog.Error("BLE device reset failed", "error", err)
 					// If reset fails, wait a bit longer before trying again
-					time.Sleep(30 * time.Second)
+					time.Sleep(10 * time.Second) // Reduced from 30 seconds
 				} else {
 					slog.Info("BLE device reset successful")
 				}

@@ -122,6 +122,15 @@ func (d *Device) connectToDevice() bool {
 			"device", d.Name,
 			"error", err)
 		deviceErrorsCounter.WithLabelValues(d.Name).Inc()
+
+		// Request BLE device reset immediately after any connection failure
+		// This prevents the BLE stack from remaining in an invalid state
+		slog.Warn("Requesting BLE device reset due to connection failure", "device", d.Name)
+		RequestBLEDeviceReset()
+
+		// Sleep briefly to allow the reset process to start
+		time.Sleep(1 * time.Second)
+
 		return false
 	}
 
