@@ -192,7 +192,7 @@ func (d *Device) checkForResetNeeds(consecutiveFailures int, criticalError bool)
 	return needsReset
 }
 
-// RegisterHandler registers a Temperature|Humidity handler
+// RegisterHandler registers a Temperature and Humidity handler
 func RegisterHandler(d Device) {
 	consecutiveFailures := 0
 	maxConsecutiveFailures := 5
@@ -207,12 +207,12 @@ func RegisterHandler(d Device) {
 		success := false
 		criticalError := false
 
-		// Step 1: Connect to device
+		// Connect to device
 		connected := d.connectToDevice()
 		if !connected {
 			consecutiveFailures++
 		} else {
-			// Step 2: Perform device operations if connected
+			// Perform device operations if connected
 			dataSuccess, err := d.handleDeviceOperation()
 
 			if dataSuccess {
@@ -226,21 +226,21 @@ func RegisterHandler(d Device) {
 			}
 		}
 
-		// Step 3: Check if device reset is needed
+		// Check if device reset is needed
 		needsReset := d.checkForResetNeeds(consecutiveFailures, criticalError)
 
-		// Step 4: Release BLE device access
+		// Release BLE device access
 		slog.Info("Releasing BLE device access", "device", d.Name)
 		bleMutex.Unlock()
 
-		// Step 5: Wait for reset if needed
+		// Wait for reset if needed
 		if needsReset && IsBLEDeviceResetRequested() {
 			waitTime := 10 * time.Second
 			slog.Info("Waiting for BLE device reset", "device", d.Name, "waitTime", waitTime)
 			time.Sleep(waitTime)
 		}
 
-		// Step 6: Handle excessive failures
+		// Handle excessive failures
 		if consecutiveFailures >= maxConsecutiveFailures {
 			slog.Warn("Multiple consecutive failures",
 				"device", d.Name,
@@ -251,10 +251,10 @@ func RegisterHandler(d Device) {
 			consecutiveFailures = maxConsecutiveFailures / 2
 		}
 
-		// Step 7: Determine wait time before next reading
+		// Determine wait time before next reading
 		waitTimeBetweenAttempts = calculateWaitTime(success)
 
-		// Step 8: Wait before next reading
+		// Wait before next reading
 		slog.Info("Waiting before next reading",
 			"device", d.Name,
 			"waitTime", waitTimeBetweenAttempts)
@@ -430,24 +430,24 @@ func (d *Device) discoverDeviceProfile(maxRetries int) (*ble.Profile, int) {
 func (d *Device) readSensorData(c ble.UUID) bool {
 	slog.Info("Reading sensor data", "device", d.Name, "uuid", c.String())
 
-	// Step 1: Discover device profile
+	// Discover device profile
 	maxRetries := 3
 	profile, errors := d.discoverDeviceProfile(maxRetries)
 	if profile == nil {
 		return false
 	}
 
-	// Step 2: Find the characteristic
+	// Find the characteristic
 	if u := profile.Find(ble.NewCharacteristic(c)); u != nil {
 		characteristic := u.(*ble.Characteristic)
 
 		// Check if this characteristic supports notifications and has CCCD
 		if (characteristic.Property&ble.CharNotify) != 0 && characteristic.CCCD != nil {
-			slog.Info("Registering Temperature|Humidity Handler",
+			slog.Info("Registering Temperature and Humidity Handler",
 				"device", d.Name,
 				"handle", characteristic.Handle)
 
-			// Step 3: Subscribe to notifications
+			// Subscribe to notifications
 			subscribed, subErrors := d.subscribeToCharacteristic(characteristic, maxRetries)
 			errors += subErrors
 
@@ -455,10 +455,10 @@ func (d *Device) readSensorData(c ble.UUID) bool {
 				return false
 			}
 
-			// Step 4: Wait for data
+			// Wait for data
 			time.Sleep(6 * time.Second)
 
-			// Step 5: Unsubscribe
+			// Unsubscribe
 			errors += d.unsubscribeFromCharacteristic(characteristic, maxRetries)
 
 			return true // Successfully read data

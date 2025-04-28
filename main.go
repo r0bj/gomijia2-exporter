@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	ver string = "0.17"
+	ver string = "0.36"
 )
 
 var (
@@ -153,16 +153,8 @@ func main() {
 	// Start a goroutine to monitor and reset BLE device if needed
 	go func() {
 		checkInterval := 5 * time.Second // Reduced from 15 seconds
-		checkCount := 0
 
 		for {
-			// Log the monitor status periodically
-			checkCount++
-			if checkCount%12 == 0 { // Still log every minute (12*5=60 seconds)
-				slog.Info("BLE device reset monitor check",
-					"resetRequested", IsBLEDeviceResetRequested())
-			}
-
 			if IsBLEDeviceResetRequested() {
 				slog.Info("BLE device reset requested, attempting reset")
 				if err := resetBLEDevice(); err != nil {
@@ -184,7 +176,7 @@ func main() {
 			"device", device.Name,
 			"address", device.Addr)
 		// Stagger the start times to avoid collisions
-		startDelay := i * 3 // 5 seconds between device starts
+		startDelay := i * 10
 		go func(d Device, delay int) {
 			// Initial delay to stagger device polling
 			time.Sleep(time.Duration(delay) * time.Second)
